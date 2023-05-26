@@ -1,13 +1,59 @@
 # MonitoringLinuxServer
-a shell script that monitors all running processes in Linux, checks for processes that are either in a zombie state or consume a significant amount of CPU time, and sends an email notification if any issues are found:
-how can use:
+#--------------------------------------------------------------------------#
 
-Replace "YourMail@youemail.com" with the actual email address of the recipient.
+# START BODY:
 
-In this script, the is_process_zombie function checks if a process with a given PID is in a zombie state. It looks for the "Z" flag in the process status file (/proc/$pid/status). If a process is a zombie, an email is sent with the appropriate subject and body.
+#--------------------------------------------------------------------------#
 
-The is_process_high_cpu function checks if a process with a given PID exceeds the CPU threshold specified. It retrieves the CPU usage percentage for the process using ps command and compares it with the threshold. If the CPU usage is higher than the threshold, an email is sent with the appropriate subject and body.
+#!/bin/bash
 
-The main script first defines the CPU threshold (e.g., 90% in this example). It then retrieves all running process PIDs using ps command. For each PID, it checks if the process is a zombie or has high CPU usage, and sends an email notification if any issues are found.
+# Define recipient email address
+recipient="YourMail@YoeMail.com"
 
-You can save this script in a file, make it executable with chmod +x script_name.sh, and run it periodically using a cron job or any other scheduling mechanism to monitor the processes and receive email notifications for any issues.
+# Function to send an email
+send_email() {
+  local subject="$1"
+  local body="$2"
+
+  echo "$body" | mail -s "$subject" "$recipient"
+}
+
+# Function to check if a process is a zombie
+is_process_zombie() {
+  local pid="$1"
+  grep -q "Z" "/proc/$pid/status" 2>/dev/null
+}
+
+# Function to check if a process exceeds CPU threshold
+is_process_high_cpu() {
+  local pid="$1"
+  local cpu_threshold="$2"
+  local cpu_usage=$(ps -p "$pid" -o %cpu | tail -n 1)
+  awk -v threshold="$cpu_threshold" -v usage="$cpu_usage" 'BEGIN {if (usage > threshold) exit 0; else exit 1}'
+}
+
+# Main script
+
+# CPU threshold in percentage
+cpu_threshold=90
+
+# Get all running process PIDs
+pids=$(ps -eo pid=)
+
+# Loop through each process
+for pid in $pids; do
+  # Check if the process is a zombie
+  if is_process_zombie "$pid"; then
+    subject="Zombie Process Alert"
+    body="Process with PID $pid is in a zombie state."
+    send_email "$subject" "$body"
+  fi
+
+  # Check if the process exceeds CPU threshold
+  if is_process_high_cpu "$pid" "$cpu_threshold"; then
+    process_name=$(ps -p "$pid" -o comm=)
+    subject="High CPU Usage Alert"
+    body="Process '$process_name' with PID $pid is consuming high CPU time."
+    send_email "$subject" "$body"
+  fi
+done
